@@ -34,6 +34,12 @@ class User(Base):
 
 class Property(Base):
     __tablename__ = "properties"
+    __table_args__ = (
+        CheckConstraint(
+            "property_type IN ('apartment', 'hostel', 'shops', 'residential')",
+            name="check_property_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
