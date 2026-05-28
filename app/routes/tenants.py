@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Tenant, Unit, User
+from app.models import Property, Tenant, Unit, User
 from app.routes.auth import get_current_user
+from app.routes.properties import get_owned_property
 from app.routes.units import get_owned_unit
 from app.schemas.tenants import TenantCreate, TenantResponse, TenantUpdate
 
@@ -29,6 +30,24 @@ def get_owned_tenant(db: Session, tenant_id: int, current_user: User) -> Tenant:
     return tenant
 
 
+def get_owned_unit_in_property(
+    db: Session,
+    property_id: int,
+    unit_id: int,
+    current_user: User,
+) -> Unit:
+    get_owned_property(db, property_id, current_user)
+
+    unit = db.get(Unit, unit_id)
+    if unit is None or unit.property_id != property_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Unit not found in this property.",
+        )
+
+    return unit
+
+
 def unit_has_active_tenant(
     db: Session,
     unit_id: int,
@@ -46,24 +65,59 @@ def unit_has_active_tenant(
     return active_tenant is not None
 
 
+def landlord_has_active_tenant_with_phone(
+    db: Session,
+    owner_id: int,
+    phone: str,
+) -> bool:
+    statement = (
+        select(Tenant)
+        .join(Unit, Tenant.unit_id == Unit.id)
+        .join(Property, Unit.property_id == Property.id)
+        .where(
+            Property.owner_id == owner_id,
+            Tenant.phone == phone,
+            Tenant.status == "active",
+        )
+    )
+
+    active_tenant = db.scalar(statement)
+    return active_tenant is not None
+
+
 @router.post(
-    "/units/{unit_id}/tenants",
+    "/properties/{property_id}/units/{unit_id}/tenants",
     response_model=TenantResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Create a tenant for a property unit",
+    name="create_tenant_for_property_unit",
+    operation_id="create_tenant_for_property_unit",
 )
 def create_tenant(
+    property_id: int,
     unit_id: int,
     tenant_data: TenantCreate,
     db: DbSession,
     current_user: CurrentUser,
 ) -> Tenant:
-    unit = get_owned_unit(db, unit_id, current_user)
+    unit = get_owned_unit_in_property(db, property_id, unit_id, current_user)
 
-    if tenant_data.status == "active" and unit_has_active_tenant(db, unit.id):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This unit already has an active tenant.",
-        )
+    if tenant_data.status == "active":
+        if landlord_has_active_tenant_with_phone(
+            db,
+            current_user.id,
+            tenant_data.phone,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This tenant is already assigned to another active unit.",
+            )
+
+        if unit_has_active_tenant(db, unit.id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This unit already has an active tenant.",
+            )
 
     tenant = Tenant(
         unit_id=unit.id,
@@ -86,13 +140,20 @@ def create_tenant(
     return tenant
 
 
-@router.get("/units/{unit_id}/tenants", response_model=list[TenantResponse])
+@router.get(
+    "/properties/{property_id}/units/{unit_id}/tenants",
+    response_model=list[TenantResponse],
+    summary="List tenants for a property unit",
+    name="list_tenants_for_property_unit",
+    operation_id="list_tenants_for_property_unit",
+)
 def read_unit_tenants(
+    property_id: int,
     unit_id: int,
     db: DbSession,
     current_user: CurrentUser,
 ) -> list[Tenant]:
-    unit = get_owned_unit(db, unit_id, current_user)
+    unit = get_owned_unit_in_property(db, property_id, unit_id, current_user)
 
     return list(
         db.scalars(
@@ -103,7 +164,13 @@ def read_unit_tenants(
     )
 
 
-@router.get("/tenants/{tenant_id}", response_model=TenantResponse)
+@router.get(
+    "/tenants/{tenant_id}",
+    response_model=TenantResponse,
+    summary="Get a tenant",
+    name="get_tenant",
+    operation_id="get_tenant",
+)
 def read_tenant(
     tenant_id: int,
     db: DbSession,
@@ -112,7 +179,13 @@ def read_tenant(
     return get_owned_tenant(db, tenant_id, current_user)
 
 
-@router.put("/tenants/{tenant_id}", response_model=TenantResponse)
+@router.put(
+    "/tenants/{tenant_id}",
+    response_model=TenantResponse,
+    summary="Update a tenant",
+    name="update_tenant",
+    operation_id="update_tenant",
+)
 def update_tenant(
     tenant_id: int,
     tenant_data: TenantUpdate,
@@ -147,7 +220,13 @@ def update_tenant(
     return tenant
 
 
-@router.delete("/tenants/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/tenants/{tenant_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a tenant",
+    name="delete_tenant",
+    operation_id="delete_tenant",
+)
 def delete_tenant(
     tenant_id: int,
     db: DbSession,

@@ -38,6 +38,30 @@ def get_owned_property(db: Session, property_id: int, current_user: User) -> Pro
     return property_item
 
 
+def check_duplicate_property(
+    db: Session,
+    owner_id: int,
+    property_name: str,
+    location: str,
+    property_id_to_ignore: int | None = None,
+) -> None:
+    query = select(Property).where(
+        Property.owner_id == owner_id,
+        Property.property_name == property_name,
+        Property.location == location,
+    )
+
+    if property_id_to_ignore is not None:
+        query = query.where(Property.id != property_id_to_ignore)
+
+    existing_property = db.scalar(query)
+    if existing_property is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You already have a property with this name and location.",
+        )
+
+
 @router.post(
     "",
     response_model=PropertyResponse,
@@ -48,6 +72,13 @@ def create_property(
     db: DbSession,
     current_user: CurrentUser,
 ) -> Property:
+    check_duplicate_property(
+        db=db,
+        owner_id=current_user.id,
+        property_name=property_data.property_name,
+        location=property_data.location,
+    )
+
     property_item = Property(
         owner_id=current_user.id,
         property_name=property_data.property_name,
@@ -92,6 +123,16 @@ def update_property(
     property_item = get_owned_property(db, property_id, current_user)
 
     updates = property_data.model_dump(exclude_unset=True)
+    updated_property_name = updates.get("property_name", property_item.property_name)
+    updated_location = updates.get("location", property_item.location)
+    check_duplicate_property(
+        db=db,
+        owner_id=current_user.id,
+        property_name=updated_property_name,
+        location=updated_location,
+        property_id_to_ignore=property_item.id,
+    )
+
     for field, value in updates.items():
         setattr(property_item, field, value)
 
