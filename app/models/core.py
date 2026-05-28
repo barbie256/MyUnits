@@ -123,6 +123,13 @@ class Tenant(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        CheckConstraint(
+            "payment_status IN ('paid', 'partial', 'overdue')",
+            name="check_payment_status",
+        ),
+        CheckConstraint("credit_amount >= 0", name="check_credit_amount_not_negative"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
@@ -132,6 +139,12 @@ class Payment(Base):
     payment_date: Mapped[date] = mapped_column(Date, nullable=False)
     month_paid_for: Mapped[str] = mapped_column(String(20), nullable=False)
     balance_after_payment: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    credit_amount: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+        default=Decimal("0"),
+    )
+    payment_status: Mapped[str] = mapped_column(String(30), nullable=False)
     recorded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
