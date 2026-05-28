@@ -10,6 +10,7 @@ from app.db import get_db
 from app.models import Payment, Property, Tenant, Unit, User
 from app.routes.auth import get_current_user
 from app.schemas.payments import PaymentCreate, PaymentResponse, PaymentUpdate
+from app.services.receipts import create_receipt_for_payment
 
 
 router = APIRouter(tags=["payments"])
@@ -405,6 +406,8 @@ def create_payment(
     )
 
     db.add(payment)
+    db.flush()
+    create_receipt_for_payment(db, payment, total_available_for_month)
     db.commit()
     db.refresh(payment)
     return add_calculated_totals_to_payment(
@@ -475,6 +478,7 @@ def update_payment(
     for field, value in updates.items():
         setattr(payment, field, value)
 
+    total_available_for_month: Decimal | None = None
     if {"amount_paid", "month_paid_for"} & updates.keys():
         unit = db.get(Unit, payment.unit_id)
         if unit is None:
@@ -510,6 +514,7 @@ def update_payment(
             payment_status,
         )
 
+    create_receipt_for_payment(db, payment, total_available_for_month)
     db.commit()
     db.refresh(payment)
     return add_payment_totals_to_response(db, payment)

@@ -155,7 +155,11 @@ class Payment(Base):
     tenant: Mapped["Tenant"] = relationship(back_populates="payments")
     unit: Mapped["Unit"] = relationship(back_populates="payments")
     recorder: Mapped["User"] = relationship(back_populates="recorded_payments")
-    receipt: Mapped["Receipt | None"] = relationship(back_populates="payment")
+    receipt: Mapped["Receipt | None"] = relationship(
+        back_populates="payment",
+        cascade="all, delete-orphan",
+        single_parent=True,
+    )
 
 
 class Expense(Base):
@@ -193,7 +197,10 @@ class MaintenanceRequest(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     property_id: Mapped[int] = mapped_column(ForeignKey("properties.id"), nullable=False)
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"), nullable=False)
-    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    tenant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tenants.id"),
+        nullable=True,
+    )
     issue_title: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     priority: Mapped[str] = mapped_column(String(30), nullable=False, default="medium")
@@ -206,7 +213,9 @@ class MaintenanceRequest(Base):
 
     property: Mapped["Property"] = relationship(back_populates="maintenance_requests")
     unit: Mapped["Unit"] = relationship(back_populates="maintenance_requests")
-    tenant: Mapped["Tenant"] = relationship(back_populates="maintenance_requests")
+    tenant: Mapped["Tenant | None"] = relationship(
+        back_populates="maintenance_requests"
+    )
 
 
 class Receipt(Base):
@@ -224,7 +233,22 @@ class Receipt(Base):
         index=True,
         nullable=False,
     )
-    pdf_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False)
+    tenant_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    property_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    unit_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    amount_paid: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    payment_method: Mapped[str] = mapped_column(String(80), nullable=False)
+    payment_date: Mapped[date] = mapped_column(Date, nullable=False)
+    month_paid_for: Mapped[str] = mapped_column(String(20), nullable=False)
+    total_available_for_month: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+    balance_after_payment: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    credit_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    payment_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    recorded_by: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -232,3 +256,5 @@ class Receipt(Base):
     )
 
     payment: Mapped["Payment"] = relationship(back_populates="receipt")
+    tenant: Mapped["Tenant"] = relationship()
+    recorder: Mapped["User"] = relationship()
