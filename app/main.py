@@ -3,7 +3,13 @@ from fastapi import FastAPI
 from app import models  # noqa: F401
 from app.config import settings
 from app.db import Base, engine
-from app.routes import auth_router, properties_router, tenants_router, units_router
+from app.routes import (
+    auth_router,
+    payments_router,
+    properties_router,
+    tenants_router,
+    units_router,
+)
 
 
 app = FastAPI(
@@ -15,6 +21,7 @@ app.include_router(auth_router)
 app.include_router(properties_router)
 app.include_router(units_router)
 app.include_router(tenants_router)
+app.include_router(payments_router)
 
 
 @app.on_event("startup")
