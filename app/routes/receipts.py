@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from app.db import get_db
 from app.models import Payment, Property, Receipt, Tenant, Unit, User
 from app.routes.auth import get_current_user
 from app.schemas.receipts import ReceiptResponse
+from app.services.receipt_pdfs import build_receipt_pdf
 
 
 router = APIRouter(tags=["receipts"])
@@ -129,6 +130,30 @@ def read_receipt(
     current_user: CurrentUser,
 ) -> Receipt:
     return get_owned_receipt(db, receipt_id, current_user)
+
+
+@router.get(
+    "/receipts/{receipt_id}/pdf",
+    summary="Download a receipt PDF",
+)
+def download_receipt_pdf(
+    receipt_id: int,
+    db: DbSession,
+    current_user: CurrentUser,
+) -> Response:
+    receipt = get_owned_receipt(db, receipt_id, current_user)
+    recorder = db.get(User, receipt.recorded_by)
+    recorded_by = (
+        recorder.full_name if recorder is not None else str(receipt.recorded_by)
+    )
+    pdf_bytes = build_receipt_pdf(receipt, recorded_by)
+    filename = f"receipt-{receipt.receipt_number}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get(
