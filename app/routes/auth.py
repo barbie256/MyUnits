@@ -1,14 +1,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
-from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
+from app.schemas.auth import TokenResponse, UserCreate, UserResponse
 from app.security import create_access_token, decode_access_token, hash_password, verify_password
 
 
@@ -87,9 +87,15 @@ def register_user(user_data: UserCreate, db: DbSession) -> User:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login_user(login_data: UserLogin, db: DbSession) -> TokenResponse:
-    user = get_user_by_email(db, login_data.email)
-    if user is None or not verify_password(login_data.password, user.password_hash):
+def login_user(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: DbSession,
+) -> TokenResponse:
+    email = form_data.username.strip().lower()
+    password = form_data.password
+
+    user = get_user_by_email(db, email)
+    if user is None or not verify_password(password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password. Please check your details and try again.",
