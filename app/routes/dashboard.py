@@ -180,6 +180,7 @@ def read_dashboard_summary(
     )
 
     return DashboardSummaryResponse(
+        currency=current_user.currency,
         total_properties=count_landlord_properties(db, current_user.id),
         total_units=count_landlord_units(db, current_user.id),
         occupied_units=count_landlord_units(db, current_user.id, "occupied"),

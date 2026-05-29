@@ -85,6 +85,15 @@ def landlord_has_active_tenant_with_phone(
     return active_tenant is not None
 
 
+def sync_legacy_national_id(tenant: Tenant) -> None:
+    if tenant.id_document_number is None and tenant.national_id:
+        tenant.id_document_type = tenant.id_document_type or "national_id"
+        tenant.id_document_number = tenant.national_id
+
+    if tenant.id_document_type == "national_id" and tenant.id_document_number:
+        tenant.national_id = tenant.id_document_number
+
+
 @router.post(
     "/properties/{property_id}/units/{unit_id}/tenants",
     response_model=TenantResponse,
@@ -123,13 +132,17 @@ def create_tenant(
         unit_id=unit.id,
         full_name=tenant_data.full_name,
         phone=tenant_data.phone,
-        national_id=tenant_data.national_id,
+        nationality=tenant_data.nationality,
+        id_document_type=tenant_data.id_document_type,
+        id_document_number=tenant_data.id_document_number,
+        id_document_image_url=tenant_data.id_document_image_url,
         emergency_contact=tenant_data.emergency_contact,
         move_in_date=tenant_data.move_in_date,
         rent_due_day=tenant_data.rent_due_day,
         notes=tenant_data.notes,
         status=tenant_data.status,
     )
+    sync_legacy_national_id(tenant)
 
     if tenant.status == "active":
         unit.status = "occupied"
@@ -209,6 +222,8 @@ def update_tenant(
 
     for field, value in updates.items():
         setattr(tenant, field, value)
+
+    sync_legacy_national_id(tenant)
 
     if tenant.status == "moved_out" and unit is not None:
         unit.status = "vacant"

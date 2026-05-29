@@ -4,6 +4,13 @@ from decimal import Decimal
 from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.constants import (
+    DEFAULT_CURRENCY,
+    SUPPORTED_CURRENCIES,
+    SUPPORTED_ID_DOCUMENT_TYPES,
+    SUPPORTED_PROPERTY_TYPES,
+    sql_allowed_values,
+)
 from app.db import Base
 
 
@@ -14,6 +21,10 @@ class User(Base):
             "role IN ('landlord', 'manager', 'caretaker')",
             name="check_user_role",
         ),
+        CheckConstraint(
+            f"currency IN ({sql_allowed_values(SUPPORTED_CURRENCIES)})",
+            name="check_user_currency",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -22,6 +33,12 @@ class User(Base):
     phone: Mapped[str] = mapped_column(String(30), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(30), nullable=False)
+    currency: Mapped[str] = mapped_column(
+        String(3),
+        nullable=False,
+        default=DEFAULT_CURRENCY,
+        server_default=DEFAULT_CURRENCY,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -36,7 +53,7 @@ class Property(Base):
     __tablename__ = "properties"
     __table_args__ = (
         CheckConstraint(
-            "property_type IN ('apartment', 'hostel', 'shops', 'residential')",
+            f"property_type IN ({sql_allowed_values(SUPPORTED_PROPERTY_TYPES)})",
             name="check_property_type",
         ),
     )
@@ -96,6 +113,10 @@ class Tenant(Base):
             "status IN ('active', 'moved_out')",
             name="check_tenant_status",
         ),
+        CheckConstraint(
+            f"id_document_type IN ({sql_allowed_values(SUPPORTED_ID_DOCUMENT_TYPES)})",
+            name="check_tenant_id_document_type",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -103,6 +124,10 @@ class Tenant(Base):
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)
     phone: Mapped[str] = mapped_column(String(30), nullable=False)
     national_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    nationality: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    id_document_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    id_document_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    id_document_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     emergency_contact: Mapped[str | None] = mapped_column(String(100), nullable=True)
     move_in_date: Mapped[date] = mapped_column(Date, nullable=False)
     rent_due_day: Mapped[int] = mapped_column(nullable=False)

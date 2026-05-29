@@ -19,6 +19,7 @@ class RecentPaymentResponse(BaseModel):
 
 
 class DashboardSummaryResponse(BaseModel):
+    currency: str
     total_properties: int
     total_units: int
     occupied_units: int

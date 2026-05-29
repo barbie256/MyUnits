@@ -1,7 +1,15 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
 from app import models  # noqa: F401
+from app.constants import (
+    DEFAULT_CURRENCY,
+    SUPPORTED_CURRENCIES,
+    SUPPORTED_ID_DOCUMENT_TYPES,
+    SUPPORTED_PROPERTY_TYPES,
+    sql_allowed_values,
+)
 from app.config import settings
 from app.db import Base, engine
 from app.routes import (
@@ -19,6 +27,21 @@ from app.routes import (
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.API_VERSION,
+)
+
+allowed_origins = [
+    "http://localhost:8081",
+    "http://127.0.0.1:8081",
+    "http://localhost:19006",
+    "http://127.0.0.1:19006",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(auth_router)
@@ -40,6 +63,9 @@ def create_database_tables() -> None:
     inspector = inspect(engine)
     add_missing_payment_columns(inspector)
     add_missing_receipt_columns(inspector)
+    add_missing_user_columns(inspector)
+    add_missing_tenant_identity_columns(inspector)
+    update_allowed_value_constraints()
     allow_maintenance_without_tenant(inspector)
 
 
@@ -114,6 +140,104 @@ def add_missing_receipt_columns(inspector: object) -> None:
             connection.execute(
                 text(f"ALTER TABLE receipts ADD COLUMN {name} {column_type}")
             )
+
+
+def add_missing_user_columns(inspector: object) -> None:
+    if "users" not in inspector.get_table_names():
+        return
+
+    user_columns = [column["name"] for column in inspector.get_columns("users")]
+    if "currency" in user_columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE users "
+                f"ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT '{DEFAULT_CURRENCY}'"
+            )
+        )
+
+
+def add_missing_tenant_identity_columns(inspector: object) -> None:
+    if "tenants" not in inspector.get_table_names():
+        return
+
+    tenant_columns = [column["name"] for column in inspector.get_columns("tenants")]
+    columns_to_add = {
+        "nationality": "VARCHAR(80)",
+        "id_document_type": "VARCHAR(30)",
+        "id_document_number": "VARCHAR(80)",
+        "id_document_image_url": "VARCHAR(500)",
+    }
+
+    missing_columns = {
+        name: column_type
+        for name, column_type in columns_to_add.items()
+        if name not in tenant_columns
+    }
+    if not missing_columns:
+        return
+
+    with engine.begin() as connection:
+        for name, column_type in missing_columns.items():
+            connection.execute(
+                text(f"ALTER TABLE tenants ADD COLUMN {name} {column_type}")
+            )
+
+        if "national_id" in tenant_columns:
+            connection.execute(
+                text(
+                    "UPDATE tenants "
+                    "SET id_document_type = 'national_id', "
+                    "id_document_number = national_id "
+                    "WHERE national_id IS NOT NULL "
+                    "AND id_document_number IS NULL"
+                )
+            )
+
+
+def update_allowed_value_constraints() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE users DROP CONSTRAINT IF EXISTS check_user_currency")
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE users "
+                "ADD CONSTRAINT check_user_currency "
+                f"CHECK (currency IN ({sql_allowed_values(SUPPORTED_CURRENCIES)}))"
+            )
+        )
+
+        connection.execute(
+            text("ALTER TABLE properties DROP CONSTRAINT IF EXISTS check_property_type")
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE properties "
+                "ADD CONSTRAINT check_property_type "
+                f"CHECK (property_type IN ({sql_allowed_values(SUPPORTED_PROPERTY_TYPES)}))"
+            )
+        )
+
+        connection.execute(
+            text(
+                "ALTER TABLE tenants "
+                "DROP CONSTRAINT IF EXISTS check_tenant_id_document_type"
+            )
+        )
+        connection.execute(
+            text(
+                "ALTER TABLE tenants "
+                "ADD CONSTRAINT check_tenant_id_document_type "
+                "CHECK (id_document_type IS NULL OR "
+                f"id_document_type IN ({sql_allowed_values(SUPPORTED_ID_DOCUMENT_TYPES)}))"
+            )
+        )
 
 
 def allow_maintenance_without_tenant(inspector: object) -> None:

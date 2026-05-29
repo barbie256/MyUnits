@@ -70,6 +70,7 @@ def register_user(user_data: UserCreate, db: DbSession) -> User:
         phone=user_data.phone,
         password_hash=hash_password(user_data.password),
         role=user_data.role,
+        currency=user_data.currency,
     )
 
     db.add(user)
