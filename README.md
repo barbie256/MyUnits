@@ -21,7 +21,7 @@ A property management application built with Python to help landlords manage pro
 
 ## Project Status
 
-This project was built as part of my software development learning journey and property management platform development.
+This project was built to help landlords and property managers manage properties, tenants, rent payments, and receipts more efficiently.
 
 ## Author
 
